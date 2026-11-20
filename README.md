@@ -2,6 +2,8 @@
 
 让 Linux 稳定访问 GitHub 的一组小脚本：自动探测当前可用的 GitHub IP，写入 `/etc/hosts`，并用 systemd 定时器每 10 分钟复核刷新。
 
+项目地址：<https://github.com/qlzhj03/github-hosts>
+
 适用于「DNS 被污染 / GitHub 某些边缘 IP 间歇性超时」导致的主站、Gist、API 或静态资源打不开。
 
 ## 工作原理
@@ -28,6 +30,7 @@
 ## 安装
 
 ```bash
+git clone https://github.com/qlzhj03/github-hosts.git ~/github-hosts
 cd ~/github-hosts
 sudo bash install.sh
 ```
