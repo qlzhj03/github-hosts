@@ -23,10 +23,11 @@ import sys
 import tempfile
 import urllib.request
 
-BEGIN = "# BEGIN WORKBUDDY-GITHUB"
-END = "# END WORKBUDDY-GITHUB"
+BEGIN = "# BEGIN github-hosts"
+END = "# END github-hosts"
+LEGACY_BLOCKS = (("# BEGIN WORKBUDDY-GITHUB", "# END WORKBUDDY-GITHUB"),)
 HOSTS_FILE = "/etc/hosts"
-BACKUP_PREFIX = "/etc/hosts.workbuddy-backup-"
+BACKUP_PREFIX = "/etc/hosts.github-hosts-backup-"
 BACKUP_KEEP = 10
 PROBE_ATTEMPTS = 3
 
@@ -81,7 +82,7 @@ def doh_lookup(domain):
         try:
             req = urllib.request.Request(
                 endpoint.format(name=domain),
-                headers={"User-Agent": "workbuddy-github-hosts/1.0"},
+                headers={"User-Agent": "github-hosts/1.0"},
             )
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.load(resp)
@@ -149,14 +150,17 @@ def pick_best(domain, extra=None):
 
 
 def read_managed_block(text):
-    """Return {domain: ip} currently managed by us."""
+    """Return {domain: ip} from current and legacy managed blocks."""
+    begins = {BEGIN} | {begin for begin, _ in LEGACY_BLOCKS}
+    ends = {END} | {end for _, end in LEGACY_BLOCKS}
     current = {}
     in_block = False
     for line in text.splitlines():
-        if line.strip() == BEGIN:
+        stripped = line.strip()
+        if stripped in begins:
             in_block = True
             continue
-        if line.strip() == END:
+        if stripped in ends:
             in_block = False
             continue
         if in_block:
@@ -166,27 +170,40 @@ def read_managed_block(text):
     return current
 
 
+def remove_block(lines, begin, end):
+    """Remove one marker pair; keep everything if the block is unterminated."""
+    out = []
+    i = 0
+    while i < len(lines):
+        if lines[i].strip() == begin:
+            close = None
+            for j in range(i + 1, len(lines)):
+                if lines[j].strip() == end:
+                    close = j
+                    break
+            if close is None:
+                out.append(lines[i])
+                i += 1
+                continue
+            i = close + 1
+            continue
+        out.append(lines[i])
+        i += 1
+    return out
+
+
 def strip_managed_block(text):
     lines = text.splitlines()
-    out = []
-    in_block = False
-    for line in lines:
-        if line.strip() == BEGIN:
-            in_block = True
-            continue
-        if line.strip() == END:
-            in_block = False
-            continue
-        if not in_block:
-            out.append(line)
-    while out and out[-1].strip() == "":
-        out.pop()
-    return out
+    for begin, end in ((BEGIN, END),) + LEGACY_BLOCKS:
+        lines = remove_block(lines, begin, end)
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    return lines
 
 
 def write_hosts(new_text):
     directory = os.path.dirname(HOSTS_FILE)
-    fd, tmp = tempfile.mkstemp(prefix=".hosts.workbuddy-", dir=directory)
+    fd, tmp = tempfile.mkstemp(prefix=".hosts.github-hosts-", dir=directory)
     try:
         with os.fdopen(fd, "w") as fh:
             fh.write(new_text)
@@ -199,8 +216,9 @@ def write_hosts(new_text):
 
 
 def prune_backups():
+    prefix = os.path.basename(BACKUP_PREFIX)
     backups = sorted(
-        name for name in os.listdir("/etc") if name.startswith("hosts.workbuddy-backup-")
+        name for name in os.listdir("/etc") if name.startswith(prefix)
     )
     for name in backups[:-BACKUP_KEEP]:
         try:

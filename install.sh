@@ -5,13 +5,24 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$DIR/github-hosts.py"
-SERVICE=/etc/systemd/system/workbuddy-github-hosts.service
-TIMER=/etc/systemd/system/workbuddy-github-hosts.timer
+UNIT_DIR=/etc/systemd/system
+SERVICE_NAME="github-hosts.service"
+TIMER_NAME="github-hosts.timer"
+SERVICE="$UNIT_DIR/$SERVICE_NAME"
+TIMER="$UNIT_DIR/$TIMER_NAME"
+LEGACY_UNITS=("workbuddy-github-hosts.service" "workbuddy-github-hosts.timer")
 
 if [[ $EUID -ne 0 ]]; then
     echo "Please run with sudo: sudo bash $DIR/install.sh"
     exit 1
 fi
+
+echo "==> Migrating legacy units"
+systemctl disable --now workbuddy-github-hosts.timer 2>/dev/null || true
+for unit in "${LEGACY_UNITS[@]}"; do
+    rm -f "$UNIT_DIR/$unit"
+done
+systemctl daemon-reload
 
 echo "==> Applying verified IPs now"
 python3 "$SCRIPT" apply
@@ -42,13 +53,13 @@ WantedBy=timers.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now workbuddy-github-hosts.timer
+systemctl enable --now "$TIMER_NAME"
 
 echo
 echo "==> Done. Status:"
-systemctl --no-pager status workbuddy-github-hosts.timer | head -5 || true
+systemctl --no-pager status "$TIMER_NAME" | head -5 || true
 echo
 echo "Useful commands:"
-echo "  systemctl list-timers workbuddy-github-hosts.timer   # next refresh time"
-echo "  journalctl -u workbuddy-github-hosts.service -n 30   # refresh logs"
-echo "  sudo bash $DIR/uninstall.sh                          # full rollback"
+echo "  systemctl list-timers $TIMER_NAME   # next refresh time"
+echo "  journalctl -u $SERVICE_NAME -n 30   # refresh logs"
+echo "  sudo bash $DIR/uninstall.sh         # full rollback"

@@ -8,8 +8,8 @@
 
 1. 通过阿里 DoH、腾讯 DoH 以及内置种子 IP，收集每个域名的候选地址；
 2. 用 `curl --resolve` 对每个候选做真实 HTTPS 请求（含 TLS 证书校验），失败重试 3 次，按延迟选最优；
-3. 只更新 `/etc/hosts` 中 `BEGIN/END WORKBUDDY-GITHUB` 标记块，不改动其他条目；
-4. 每次写入前自动备份到 `/etc/hosts.workbuddy-backup-<时间戳>`；
+3. 只更新 `/etc/hosts` 中 `BEGIN/END github-hosts` 标记块，不改动其他条目；
+4. 每次写入前自动备份到 `/etc/hosts.github-hosts-backup-<时间戳>`；
 5. 某个域名所有候选都探测失败时，保留上一次可用 IP，避免把配置写坏；
 6. `gist.github.com` 与 `github.com` 共用前端，探测失败时会复用 `github.com` 已验证的 IP。
 
@@ -32,7 +32,7 @@ cd ~/github-hosts
 sudo bash install.sh
 ```
 
-安装后会立即探测并写入一次，然后启用 `workbuddy-github-hosts.timer`。
+安装后会立即探测并写入一次，然后启用 `github-hosts.timer`。如果之前装过旧名 `workbuddy-github-hosts` 的版本，`install.sh` 会自动停用并删除旧 unit，同时把 hosts 里的旧标记块迁移为新标记块。
 
 ## 常用命令
 
@@ -44,8 +44,8 @@ python3 github-hosts.py check
 sudo python3 github-hosts.py apply
 
 # 查看下次刷新时间 / 刷新日志
-systemctl list-timers workbuddy-github-hosts.timer
-journalctl -u workbuddy-github-hosts.service -n 30
+systemctl list-timers github-hosts.timer
+journalctl -u github-hosts.service -n 30
 ```
 
 验证：
@@ -65,7 +65,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://gist.github.com
 sudo bash uninstall.sh
 ```
 
-该命令会删除 systemd unit 并移除 hosts 标记块；历史备份仍保留在 `/etc/hosts.workbuddy-backup-*`，可手动恢复。
+该命令会删除 `github-hosts` 以及旧 `workbuddy-github-hosts` 的 systemd unit，并移除 hosts 标记块；历史备份仍保留在 `/etc/hosts.github-hosts-backup-*`（旧名时期的备份在 `/etc/hosts.workbuddy-backup-*`），可手动恢复。
 
 ## 已知限制
 
